@@ -166,6 +166,137 @@ router.get('/users/:id/documents', requireAdmin, async (req, res) => {
   }
 });
 
+// Download user document
+router.get('/users/:id/documents/:filename', requireAdmin, async (req, res) => {
+  try {
+    const user = await User.findById(req.params.id);
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'User not found' });
+    }
+
+    const document = user.documents.find(doc => doc.filename === req.params.filename);
+    if (!document) {
+      return res.status(404).json({ success: false, message: 'Document not found' });
+    }
+
+    const path = require('path');
+    const fs = require('fs');
+    const filePath = path.join(__dirname, '../uploads', document.filename);
+    
+    // Check if file exists
+    if (!fs.existsSync(filePath)) {
+      return res.status(404).json({ success: false, message: 'File not found on server' });
+    }
+
+    // Set appropriate headers for download
+    res.setHeader('Content-Disposition', `attachment; filename="${document.originalName}"`);
+    res.setHeader('Content-Type', document.mimetype || 'application/octet-stream');
+    
+    // Send file
+    res.sendFile(filePath);
+  } catch (error) {
+    console.error('Download document error:', error);
+    res.status(500).json({ success: false, message: 'Failed to download document' });
+  }
+});
+
+// Direct document download route - handles all document downloads
+router.get('/download/:userId/:filename', requireAdmin, async (req, res) => {
+  try {
+    const user = await User.findById(req.params.userId);
+    if (!user) {
+      return res.status(404).send('User not found');
+    }
+
+    const path = require('path');
+    const fs = require('fs');
+    const filePath = path.join(__dirname, '../uploads', req.params.filename);
+    
+    // Check if file exists
+    if (!fs.existsSync(filePath)) {
+      return res.status(404).send('File not found on server');
+    }
+
+    // Find document info for proper filename
+    const document = user.documents.find(doc => doc.filename === req.params.filename);
+    const originalName = document ? document.originalName : req.params.filename;
+    
+    // Set appropriate headers for download
+    res.setHeader('Content-Disposition', `attachment; filename="${originalName}"`);
+    
+    // Send file directly
+    res.sendFile(filePath);
+  } catch (error) {
+    console.error('Direct download error:', error);
+    res.status(500).send('Failed to download file');
+  }
+});
+
+// Get all user documents for download
+router.get('/users/:id/all-documents', requireAdmin, async (req, res) => {
+  try {
+    const user = await User.findById(req.params.id);
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'User not found' });
+    }
+
+    const path = require('path');
+    const fs = require('fs');
+    
+    // Filter documents that actually exist on the server
+    const availableDocuments = user.documents.filter(doc => {
+      const filePath = path.join(__dirname, '../uploads', doc.filename);
+      return fs.existsSync(filePath);
+    });
+
+    res.json({ 
+      success: true, 
+      documents: availableDocuments,
+      user: {
+        name: user.name,
+        email: user.email
+      }
+    });
+  } catch (error) {
+    console.error('Get all documents error:', error);
+    res.status(500).json({ success: false, message: 'Failed to get documents' });
+  }
+});
+// Get user profile details including profile picture
+router.get('/users/:id/profile', requireAdmin, async (req, res) => {
+  try {
+    const user = await User.findById(req.params.id);
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'User not found' });
+    }
+
+    res.json({ 
+      success: true, 
+      user: {
+        _id: user._id,
+        name: user.name,
+        email: user.email,
+        phone: user.phone,
+        preferredCountry: user.preferredCountry,
+        experience: user.experience,
+        education: user.education,
+        profession: user.profession,
+        linkedin: user.linkedin,
+        relocationReadiness: user.relocationReadiness,
+        profilePicture: user.profilePicture,
+        documents: user.documents,
+        applicationStatus: user.applicationStatus,
+        statusHistory: user.statusHistory,
+        createdAt: user.createdAt,
+        updatedAt: user.updatedAt
+      }
+    });
+  } catch (error) {
+    console.error('Get user profile error:', error);
+    res.status(500).json({ success: false, message: 'Failed to get user profile' });
+  }
+});
+
 // Send email to client
 router.post('/send-email', requireAdmin, [
   body('clientEmail').isEmail().withMessage('Valid email is required'),
@@ -193,7 +324,7 @@ router.post('/send-email', requireAdmin, [
     const emailTemplate = `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
         <div style="background: linear-gradient(135deg, #1e40af, #8b5cf6); padding: 2rem; text-align: center;">
-          <h1 style="color: white; margin: 0;">Advanze Travels</h1>
+          <h1 style="color: white; margin: 0;">Best Recruit</h1>
           <p style="color: white; margin: 0.5rem 0 0 0;">Your International Career Partner</p>
         </div>
         
@@ -208,27 +339,27 @@ router.post('/send-email', requireAdmin, [
           
           <div style="border-top: 1px solid #e5e7eb; padding-top: 1rem; color: #6b7280; font-size: 0.9rem;">
             <p><strong>Best regards,</strong><br>
-            The Advanze Travels Team</p>
+            The Best Recruit Team</p>
             
             <p style="margin-top: 1rem;">
-              📧 support@advancetravels.com<br>
+              📧 support@bestrecruit.com<br>
               📞 +120 185 54082<br>
-              🌐 www.advancetravels.com
+              🌐 www.bestrecruit.com
             </p>
           </div>
         </div>
         
         <div style="background: #f9fafb; padding: 1rem; text-align: center; color: #6b7280; font-size: 0.8rem;">
-          <p>© 2025 Advanze Travels. All rights reserved.</p>
+          <p>© 2025 Best Recruit. All rights reserved.</p>
         </div>
       </div>
     `;
 
     // Send email
     await transporter.sendMail({
-      from: `"Advanze Travels" <${process.env.EMAIL_USER || 'support@advancetravels.com'}>`,
+      from: `"Best Recruit" <${process.env.EMAIL_USER || 'support@bestrecruit.com'}>`,
       to: clientEmail,
-      subject: `${subject} - Advanze Travels`,
+      subject: `${subject} - Best Recruit`,
       html: emailTemplate
     });
 
@@ -295,7 +426,7 @@ router.get('/updates', requireAdmin, async (req, res) => {
     const updates = await Update.find().populate('author', 'name email').sort({ createdAt: -1 }).skip(skip).limit(limit);
 
     res.render('admin/updates', {
-      title: 'Updates Management - Advanze Travels',
+      title: 'Updates Management - Best Recruit',
       admin: req.session.admin,
       updates,
       currentPage: page,
